@@ -6,6 +6,7 @@ from torchvision import datasets
 from torchvision import transforms
 from torchvision.transforms import ToTensor
 import io
+import matplotlib.pyplot as plt
 
 import tkinter as tk
 from PIL import Image, ImageDraw
@@ -19,8 +20,8 @@ train_data = datasets.MNIST(root='data', train=True, download=True, transform=tr
 test_data = datasets.MNIST(root='data', train=False, transform=transform)
 
 loaders = {
-    'train': torch.utils.data.DataLoader(train_data, batch_size=100, shuffle=True, num_workers=1),
-    'test': torch.utils.data.DataLoader(test_data, batch_size=100, shuffle=True, num_workers=1),
+    'train': torch.utils.data.DataLoader(train_data, batch_size=100, shuffle=True, num_workers=0),
+    'test': torch.utils.data.DataLoader(test_data, batch_size=100, shuffle=True, num_workers=0),
 
 }
 
@@ -54,30 +55,37 @@ loss_func = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 total_step = len(loaders['train'])
 epochs = 10
-for epoch in range(epochs):
-    for i, images, labels in enumerate(loaders['train']):
-        images, labels = images.to(device), labels.to(device)
-        b_x = Variable(images)
-        b_y = Variable(labels)
-        output = model(b_x)[0]
 
-        loss = loss_func(output, b_y)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+def train(epochs, model, loaders):
+    for epoch in range(epochs):
+        for i, (images, labels) in enumerate(loaders['train']):
+            images, labels = images.to(device), labels.to(device)
+            b_x = Variable(images)
+            b_y = Variable(labels)
+            outputs = model(b_x)[0]
 
-        if (i+1) % 100 == 0:
-            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch + 1, epochs, i + 1,total_step, loss.item()))
+            loss = loss_func(outputs, b_y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-model.eval()
-with torch.no_grad():
-    correct = 0
-    total = 0
-    for images, labels, in loaders['test']:
-        test_output, last_layer = model(images)
-        pred_y = torch.max(test_output, 1)[1].data.squeeze()
-        accuracy = (pred_y==labels).sum().item() / float(labels.size(0))
-    print('Test Accuracy of the model on the 10000 test images: %.2f' % accuracy)
+            if (i+1) % 100 == 0:
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch + 1, epochs, i + 1,total_step, loss.item()))
+
+def test():
+    model.eval()
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        for images, labels, in loaders['test']:
+            test_output, last_layer = model(images)
+            pred_y = torch.max(test_output, 1)[1].data.squeeze()
+            accuracy = (pred_y==labels).sum().item() / float(labels.size(0))
+        print('Test Accuracy of the model on the 10000 test images: %.2f' % accuracy)
+
+train(epochs, model, loaders)
+test()
+
 
 
 def recognize_digit():
@@ -86,21 +94,24 @@ def recognize_digit():
         img = Image.open(io.BytesIO(img.encode('utf-8')))
         img = img.resize((28, 28)).convert('L')
         img = transform(img)
-        img = img.unsqueeze(0).to(device)
-        output = model(img)
+        img = img.unsqueeze(1).to(device)
+        plt.imshow(img.squeeze(), cmap="gray")
+        plt.show()
+        output = model(img)[0]
         _, predicted = torch.max(output.data, 1)
         result_label.config(text=f"Predicted digit: {predicted.item()}")
 
 root = tk.Tk()
 root.title("Handwritten Digit Recognition")
 
-img_canvas = tk.Canvas(root, width=200, height=200, bg="white")
+img_canvas = tk.Canvas(root, width=200, height=200, bg="black")
 img_canvas.pack()
 
 result_label = tk.Label(root, text="", font=("Helvetica", 16))
 result_label.pack()
 
-img_canvas.bind("<B1-Motion>", lambda event: img_canvas.create_oval(event.x - 10, event.y - 10, event.x + 10, event.y + 10, fill="black"))
+img_canvas.bind("<B1-Motion>", lambda event: img_canvas.create_oval(event.x - 10, event.y - 10, event.x + 10, event.y + 10, fill="white", outline='white'))
+img_canvas.bind("<B3-Motion>", lambda event: img_canvas.create_oval(event.x - 200, event.y - 200, event.x + 200, event.y + 200, fill="black"))
 
 recognize_button = tk.Button(root, text="Recognize Digit", command=recognize_digit)
 recognize_button.pack()
